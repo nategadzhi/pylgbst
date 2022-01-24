@@ -6,7 +6,7 @@ import time
 
 import bleak
 
-from pylgbst.comms import Connection, MOVE_HUB_HW_UUID_CHAR
+from pylgbst.comms import Connection, MOVE_HUB_HW_UUID_CHAR, MOVE_HUB_HW_UUID_SERV
 
 log = logging.getLogger('comms-bleak')
 
@@ -56,6 +56,7 @@ class BleakDriver:
         self._processing_thread.start()
 
     async def _bleak_thread(self):
+        logging.info("Communication thread started")
         bleak = BleakConnection()
         await bleak.connect(self.hub_mac, self.hub_name)
         await bleak.set_notify_handler((self._safe_handler, self.resp_queue))
@@ -138,8 +139,13 @@ class BleakConnection(Connection):
         :return: None
         """
         log.info("Discovering devices... Press green button on Hub")
+
+        # Bleak on MacOS 12 and 13 acts up and requires to provide the list of
+        # service uuids to scan for them.
+        scanner = bleak.BleakScanner(service_uuids=[MOVE_HUB_HW_UUID_SERV])
+
         for i in range(0, 30):
-            devices = await bleak.discover(timeout=1)
+            devices = await scanner.discover(timeout=1, service_uuids=[MOVE_HUB_HW_UUID_SERV])
             log.debug("Devices: %s", devices)
             for dev in devices:
                 log.debug(dev)
@@ -156,7 +162,7 @@ class BleakConnection(Connection):
         else:
             raise ConnectionError('Device not found.')
 
-        self._client = bleak.BleakClient(self._device.address)
+        self._client = bleak.BleakClient(address_or_ble_device=self._device)
         status = await self._client.connect()
         log.debug('Connection status: {status}'.format(status=status))
 
